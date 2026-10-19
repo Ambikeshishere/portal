@@ -1,0 +1,14 @@
+{
+  "name": "pw-ticket-portal",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev": "node dev/server.js",
+    "start": "node dev/server.js",
+    "test": "node test/smoke.js && node test/smoke2.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.11.0"
+  }
+}
