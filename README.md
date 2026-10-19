@@ -137,8 +137,8 @@ service, and exercise the full API surface — no network, no real email.
 
 ## Security notes
 
-- OTPs are stored as `sha256(otp + '|' + email + SALT)`; session tokens as
-  `sha256(token + SALT)`. The `SALT` is generated randomly on first setup.
+- OTPs, session tokens, and approval tokens are stored as plain values
+  (no hashing or salt).
 - Signup is locked to the `ALLOWED_DOMAIN` (`pw.live`).
 - Signup always creates a `USER`; elevated roles are granted only by an admin.
 - Cron endpoints reject requests without the correct `x-cron-secret`.
