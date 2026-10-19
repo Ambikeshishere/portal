@@ -113,8 +113,10 @@ are unit-tested with crafted RS256 JWTs against an injected test key).
 
 ## Firebase (Google sign-in) setup
 
-1. **Firebase console** → your project → *Authentication → Sign-in method →
-   Google* → enable it, set the support email.
+1. **Firebase console** → your project → *Authentication*. If this is the first
+   time, click **Get started** (this provisions Firebase Auth for the project —
+   without it every sign-in call fails with `auth/configuration-not-found`).
+   Then *Sign-in method → Google* → enable it, set the support email.
 2. *Authentication → Settings → Authorized domains* → add `localhost` and
    `pw-ticket-portal.vercel.app`.
 3. *Project settings → Your apps → SDK setup → Config* → copy the

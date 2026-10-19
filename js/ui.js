@@ -168,7 +168,7 @@
     state.pendingTicket = ticketFromUrl();
 
     var t = localStorage.getItem('pw_token');
-    if (!t) { showAuth(); wireAuth(); return; }
+    if (!t) { showAuth(); wireAuth(); handleRedirect(); return; }
 
     state.token = t;
     var cached = readStoredUser();
@@ -228,7 +228,7 @@
   /* Google popup → idToken → portal session (roles come from the users table). */
   function firebaseLogin() {
     if (!firebaseReady()) { toast('Google sign-in is not configured yet.', 'err'); return; }
-    if (!firebase.apps.length) firebase.initializeApp(window.PW_CONFIG.FIREBASE);
+    ensureFirebase();
     var provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     var b = $('btnGoogleLogin'); b.disabled = true; b.innerHTML = spin() + ' Opening Google…';
@@ -239,18 +239,64 @@
     }).then(function (idToken) {
       return call('loginWithFirebase', { idToken: idToken });
     }).then(function (d) {
-      state.token = d.token; state.user = d.user;
-      localStorage.setItem('pw_token', d.token);
-      storeUser(d.user);
-      if (d.provisioned) toast('Welcome! Your account was created.', 'ok');
-      enterApp();
+      finishGoogleLogin(d);
     }).catch(function (e) {
-      var msg = (e && e.message) || 'Google sign-in failed.';
-      if (e && e.code === 'auth/popup-closed-by-user') msg = 'Sign-in was cancelled.';
-      else if (e && e.code === 'auth/cancelled-popup-request') msg = 'Sign-in was cancelled.';
-      else if (e && e.code === 'auth/popup-blocked') msg = 'The browser blocked the Google popup. Allow popups for this site and try again.';
-      toast(msg, 'err');
+      if (e && e.code === 'auth/popup-blocked') {
+        // No popup allowed → continue the same flow in this tab.
+        b.innerHTML = spin() + ' Redirecting…';
+        setTimeout(function () {   // never leave the button stuck if the navigation is blocked
+          if (b.textContent.indexOf('Redirecting') >= 0) {
+            b.disabled = false; b.textContent = 'Continue with Google';
+            toast('Google did not open. Allow popups for this site and try again.', 'err');
+          }
+        }, 12000);
+        return firebase.auth().signInWithRedirect(provider);
+      }
+      toast(googleAuthError(e), 'err');
+    }).catch(function (e) {
+      // e.g. signInWithRedirect itself failed (misconfigured project)
+      toast(googleAuthError(e), 'err');
     }).then(function () { b.disabled = false; b.textContent = 'Continue with Google'; });
+  }
+  /* Human-readable messages for the common Firebase auth failures. */
+  function googleAuthError(e) {
+    var c = e && e.code;
+    if (c === 'auth/configuration-not-found')
+      return 'Google sign-in is not enabled in the Firebase console yet (Authentication → Get started → Google).';
+    if (c === 'auth/operation-not-allowed')
+      return 'Google sign-in is disabled for this project. Enable it in Firebase Authentication → Sign-in method.';
+    if (c === 'auth/unauthorized-domain')
+      return 'This domain is not allowed. Add it under Firebase Authentication → Settings → Authorized domains.';
+    if (c === 'auth/popup-closed-by-user' || c === 'auth/cancelled-popup-request') return 'Sign-in was cancelled.';
+    if (c === 'auth/popup-blocked') return 'Your browser blocked the Google window.';
+    if (c === 'auth/invalid-api-key') return 'Firebase config looks wrong (invalid API key).';
+    return (e && e.message) || 'Google sign-in failed.';
+  }
+  function ensureFirebase() {
+    if (!firebase.apps.length) firebase.initializeApp(window.PW_CONFIG.FIREBASE);
+  }
+  /* After a signInWithRedirect round-trip, finish the portal login here. */
+  function handleRedirect() {
+    if (!firebaseReady()) return;
+    ensureFirebase();
+    firebase.auth().getRedirectResult().then(function (res) {
+      var u = res && res.user;
+      if (!u) return;
+      return u.getIdToken().then(function (idToken) {
+        return call('loginWithFirebase', { idToken: idToken });
+      }).then(function (d) {
+        finishGoogleLogin(d);
+      });
+    }).catch(function (e) {
+      toast(googleAuthError(e), 'err');
+    });
+  }
+  function finishGoogleLogin(d) {
+    state.token = d.token; state.user = d.user;
+    localStorage.setItem('pw_token', d.token);
+    storeUser(d.user);
+    if (d.provisioned) toast('Welcome! Your account was created.', 'ok');
+    enterApp();
   }
   function doSignup() {
     var payload = {
