@@ -487,7 +487,9 @@
     var canAssign = state.user.role === 'CBA' || state.user.role === 'ADMIN';
     $('content').innerHTML =
       '<div class="page-head"><h2>Raise a ticket</h2></div>' +
-      '<div class="card" style="padding:22px;max-width:720px">' +
+      '<div class="glass-scene">' +
+      '<div class="glass-card">' +
+        '<div class="glass-title">New request</div>' +
         '<div class="field"><label>Title</label><input id="ntTitle" placeholder="Short summary"></div>' +
         '<div class="grid2">' +
           '<div class="field"><label>Category</label><select id="ntCategory">' +
@@ -510,6 +512,7 @@
         '<div class="inline" style="justify-content:flex-end">' +
           '<button class="btn" id="ntCancel">Cancel</button>' +
           '<button class="btn primary" id="ntSubmit">Submit ticket</button></div>' +
+      '</div>' +
       '</div>';
     $('ntCancel').onclick = function () { setView('tickets'); };
     $('ntSubmit').onclick = function () { submitTicket(false); };
