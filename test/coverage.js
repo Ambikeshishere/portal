@@ -261,6 +261,34 @@ async function main() {
   try { await tickets.rate({ email: 'user1@pw.live', role: 'USER', Role: 'USER' }, { ticketId: tid1, rating: 3 }); ok(false, 'rate already rated rejected'); } catch (e) { ok(true, 'rate already rated rejected'); }
   try { await tickets.rate({ email: 'user1@pw.live', role: 'USER', Role: 'USER' }, { ticketId: 'TKT-9999-00001', rating: 3 }); ok(false, 'rate not owner rejected'); } catch (e) { ok(true, 'rate not owner rejected'); }
 
+  console.log('\n── manager + admin rights: take / resolve / close ──');
+  const adminUser = { email: 'ambikesh.srivastava@pw.live', role: 'ADMIN', Role: 'ADMIN', name: 'Ambikesh', cluster_id: 'CL-ADMIN' };
+  const u1Obj = { email: 'user1@pw.live', role: 'USER', Role: 'USER', name: 'User One', cluster_id: clId, phone: '', department: 'Analytics' };
+  const ct3 = await tickets.create(u1Obj, { title: 'Manager rights ticket', description: 'take / resolve / close', force: true });
+  const tid3 = ct3.ticketId;
+  ok(ct3.status === 'NEW' && !ct3.analystEmail, 'manager-rights ticket created unassigned');
+  const adSelf = await tickets.assign(adminUser, { ticketId: tid3, analystEmail: 'ambikesh.srivastava@pw.live' });
+  ok(adSelf.status === 'ASSIGNED' && adSelf.analystEmail === 'ambikesh.srivastava@pw.live', 'ADMIN can take any ticket for themselves');
+  const cbaTake = await tickets.assign(cbaUser, { ticketId: tid3, analystEmail: 'cba.n@pw.live' });
+  ok(cbaTake.analystEmail === 'cba.n@pw.live', 'manager can take a cluster ticket for themselves');
+  const cbaRes = await tickets.updateStatus(cbaUser, { ticketId: tid3, status: 'RESOLVED' });
+  ok(cbaRes.status === 'RESOLVED' && !!cbaRes.resolvedAt, 'manager resolves directly from ASSIGNED');
+  const cbaClose = await tickets.close(cbaUser, { ticketId: tid3 });
+  ok(cbaClose.status === 'CLOSED', 'manager closes a ticket they did not raise');
+
+  const ct4 = await tickets.create(u1Obj, { title: 'Analyst close denied ticket', description: 'x', force: true });
+  const tid4 = ct4.ticketId;
+  await tickets.assign(cbaUser, { ticketId: tid4, analystEmail: 'an1@pw.live' });
+  try { await tickets.close(an1User, { ticketId: tid4 }); ok(false, 'assignee analyst close rejected'); } catch (e) { ok(true, 'assignee analyst close rejected'); }
+  try { await tickets.close({ email: 'stranger@pw.live', role: 'USER', Role: 'USER' }, { ticketId: tid4 }); ok(false, 'plain user close of other ticket rejected'); } catch (e) { ok(true, 'plain user close of other ticket rejected'); }
+  try { await tickets.close({ email: 'cba.other@pw.live', role: 'CBA', Role: 'CBA', cluster_id: 'OTHER' }, { ticketId: tid4 }); ok(false, 'manager of another cluster close rejected'); } catch (e) { ok(true, 'manager of another cluster close rejected'); }
+  try { await tickets.updateStatus(an2User, { ticketId: tid4, status: 'RESOLVED' }); ok(false, 'non-assignee analyst resolve rejected'); } catch (e) { ok(true, 'non-assignee analyst resolve rejected'); }
+  const adRes = await tickets.updateStatus(adminUser, { ticketId: tid4, status: 'RESOLVED' });
+  ok(adRes.status === 'RESOLVED', 'ADMIN resolves any ticket directly');
+  const adClose = await tickets.close(adminUser, { ticketId: tid4 });
+  ok(adClose.status === 'CLOSED', 'ADMIN closes any ticket');
+  ok(routes.PRIVATE_API.requestReassign.roles.indexOf('ADMIN') >= 0, 'ADMIN may request reassignment');
+
   console.log('\n── tickets: comment + visibility ──');
   const cm1 = await tickets.addComment({ email: 'user1@pw.live', role: 'USER', Role: 'USER', name: 'User One' }, { ticketId: tid1, text: 'hello' });
   ok(cm1.commentId === 'ok', 'addComment');

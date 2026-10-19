@@ -65,8 +65,8 @@ portal/
     setup.js          one-time schema + seed (admin user, Admin cluster, config)
   dev/server.js       local dev server (static + /api)
   test/smoke.js       USER flow smoke test (19 assertions)
-  test/smoke2.js      CBA/ANALYST/ADMIN flow smoke test (33 assertions)
-  test/coverage.js    every exported function across lib/ (146 assertions)
+  test/smoke2.js      CBA (Manager)/ANALYST/ADMIN flow smoke test (33 assertions)
+  test/coverage.js    every exported function across lib/ (158 assertions)
   index.html          front-end: Google sign-in card (no self-signup form)
   js/config.js        API_URL + FIREBASE web config placeholders
   js/api.js           transport (POST + JSONP fallback)
@@ -160,12 +160,15 @@ be filled in later from the admin *Users* screen).
 
 ## Roles
 
+The `CBA` role is a cluster's **Manager** — the UI labels it `Manager`
+everywhere (role dropdown, user/cluster tables, ticket timeline, analytics).
+
 | Role | Can do |
 |---|---|
 | `USER` | Raise tickets, comment, close/reopen/rate own tickets |
-| `CBA` | Everything a USER can, plus assign tickets, request approvals, manage cluster analysts, decide reassignments |
+| `CBA` (**Manager**) | Everything a USER can, plus take any ticket in their own cluster for themselves, resolve it directly, close it (even someone else's), assign analysts, request approvals, manage cluster analysts, decide reassignments |
 | `ANALYST` | Work assigned tickets, update status, request reassignment |
-| `ADMIN` | Everything, plus users, clusters, analytics, activity, CSV export |
+| `ADMIN` | **Every right**: take any ticket in any cluster for themselves, assign to any manager/analyst, resolve or close any ticket, plus users, clusters, analytics, activity, CSV export |
 
 ## Security notes
 

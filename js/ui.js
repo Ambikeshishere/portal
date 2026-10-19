@@ -36,6 +36,8 @@
     el._t = setTimeout(function () { el.classList.add('hidden'); }, 4000);
   }
   function spin() { return '<span class="spinner"></span>'; }
+  /* The CBA role is the cluster's "Manager" everywhere in the UI. */
+  function roleName(r) { return String(r || '').toUpperCase() === 'CBA' ? 'Manager' : String(r || ''); }
   function statusBadge(s) { return '<span class="badge b-' + h(s) + '">' + h(String(s || '').replace(/_/g, ' ')) + '</span>'; }
   function priorityBadge(p) { return '<span class="badge p-' + h(p) + '">' + h(p) + '</span>'; }
   function approvalBadge(s) { return s && s !== 'NONE' ? '<span class="badge ap-' + h(s) + '">' + h(s) + '</span>' : '<span class="muted">—</span>'; }
@@ -192,7 +194,7 @@
       var changed = prev.role !== me.data.role || prev.name !== me.data.name;
       state.user = me.data;
       storeUser(me.data);
-      if (changed) { $('userChip').textContent = state.user.name + ' · ' + state.user.role; renderNav(); }
+      if (changed) { $('userChip').textContent = state.user.name + ' · ' + roleName(state.user.role); renderNav(); }
     }, function () { /* transient network error: keep the cached session */ });
   }
 
@@ -296,7 +298,7 @@
   function enterApp() {
     $('authScreen').classList.add('hidden');
     $('mainScreen').classList.remove('hidden');
-    $('userChip').textContent = state.user.name + ' · ' + state.user.role;
+    $('userChip').textContent = state.user.name + ' · ' + roleName(state.user.role);
     $('btnLogout').onclick = function () { doLogout(false); };
     $('btnMenu').onclick = function () { $('sidebar').classList.toggle('open'); };
     renderNav();
@@ -492,7 +494,7 @@
         '<div class="field"><label>Department</label><input id="ntDept" value="' + h(state.user.department || '') + '"></div>' +
         (canAssign ? '<div class="field"><label>Assign to</label><select id="ntAssign"><option value="">Leave unassigned</option></select>' +
           '<div class="muted" style="font-size:12px;margin-top:4px">' +
-            (state.user.role === 'ADMIN' ? 'Hand it to any CBA or analyst, in any cluster.' : 'Take it yourself, or hand it to an analyst in your cluster.') +
+            (state.user.role === 'ADMIN' ? 'Hand it to any manager or analyst, in any cluster.' : 'Take it yourself, or hand it to an analyst in your cluster.') +
           '</div></div>' : '') +
         '<div class="field"><label>Description</label><textarea id="ntDesc" placeholder="Describe your request in detail…"></textarea></div>' +
         '<div class="inline" style="justify-content:flex-end">' +
@@ -687,7 +689,7 @@
       var users = res[0], clusters = res[1];
       var rows = users.map(function (u) {
         return '<tr><td><b>' + h(u.name) + '</b><div class="muted" style="font-size:12px">' + h(u.email) + '</div></td>' +
-          '<td>' + h(u.role) + '</td><td>' + h(u.clusterId || '—') + '</td><td>' + h(u.department || '—') + '</td>' +
+          '<td>' + h(roleName(u.role)) + '</td><td>' + h(u.clusterId || '—') + '</td><td>' + h(u.department || '—') + '</td>' +
           '<td>' + h(u.phone || '—') + '</td><td class="muted" style="font-size:12px">' + fmt(u.lastLoginAt) + '</td>' +
           '<td>' + (u.status === 'ACTIVE' ? '<span class="badge ap-APPROVED">Active</span>' : '<span class="badge ap-REJECTED">Inactive</span>') + '</td>' +
           '<td><button class="btn small" data-edit="' + h(u.email) + '">Edit</button></td></tr>';
@@ -712,13 +714,13 @@
       '<div class="grid2"><div class="field"><label>Name</label><input id="mName" value="' + h(u.name) + '"></div>' +
       '<div class="field"><label>Email</label><input id="mEmail" value="' + h(u.email) + '"' + (u.email ? ' disabled' : '') + '></div></div>' +
       '<div class="grid2"><div class="field"><label>Role</label><select id="mRole">' +
-        ['USER','CBA','ANALYST','ADMIN'].map(function (r) { return '<option' + (u.role === r ? ' selected' : '') + '>' + r + '</option>'; }).join('') +
+        ['USER','CBA','ANALYST','ADMIN'].map(function (r) { return '<option value="' + r + '"' + (u.role === r ? ' selected' : '') + '>' + (r === 'CBA' ? 'Manager' : r) + '</option>'; }).join('') +
       '</select></div><div class="field"><label>Cluster</label><select id="mCluster"><option value="">—</option>' +
         clusters.map(function (c) { return '<option value="' + h(c.clusterId) + '"' + (u.clusterId === c.clusterId ? ' selected' : '') + '>' + h(c.name) + '</option>'; }).join('') +
       '</select></div></div>' +
       '<div class="grid2"><div class="field"><label>Phone</label><input id="mPhone" value="' + h(u.phone) + '"></div>' +
       '<div class="field"><label>Department</label><input id="mDept" value="' + h(u.department) + '"></div></div>' +
-      '<div class="grid2"><div class="field"><label>Reports to (CBA email)</label><input id="mReports" value="' + h(u.reportsTo) + '"></div>' +
+      '<div class="grid2"><div class="field"><label>Reports to (Manager email)</label><input id="mReports" value="' + h(u.reportsTo) + '"></div>' +
       '<div class="field"><label>Status</label><select id="mStatus">' +
         ['ACTIVE','INACTIVE'].map(function (s) { return '<option' + (u.status === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
       '</select></div></div>',
@@ -744,7 +746,7 @@
       $('content').innerHTML =
         '<div class="page-head"><h2>Clusters</h2><button class="btn primary" id="btnAddCluster">＋ Add cluster</button></div>' +
         '<div class="card"><div class="table-wrap">' +
-          (list.length ? '<table class="tbl"><thead><tr><th>ID</th><th>Name</th><th>CBA</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' : '<div class="empty">No clusters yet.</div>') +
+          (list.length ? '<table class="tbl"><thead><tr><th>ID</th><th>Name</th><th>Manager</th><th>Status</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>' : '<div class="empty">No clusters yet.</div>') +
         '</div></div>';
       $('btnAddCluster').onclick = function () { clusterModal(null); };
       Array.prototype.forEach.call(document.querySelectorAll('[data-edit]'), function (b) {
@@ -756,7 +758,7 @@
     c = c || { clusterId: '', name: '', cbaEmail: '', status: 'ACTIVE' };
     openModal('Cluster', '' +
       '<div class="field"><label>Name</label><input id="cName" value="' + h(c.name) + '"></div>' +
-      '<div class="field"><label>CBA email</label><input id="cCba" value="' + h(c.cbaEmail) + '" placeholder="cba@pw.live"></div>' +
+      '<div class="field"><label>Manager email</label><input id="cCba" value="' + h(c.cbaEmail) + '" placeholder="manager@pw.live"></div>' +
       '<div class="field"><label>Status</label><select id="cStatus">' +
         ['ACTIVE','INACTIVE'].map(function (s) { return '<option' + (c.status === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
       '</select></div>',
@@ -774,7 +776,7 @@
       var rows = d.users.map(function (u) {
         var ev = Object.keys(u.byEvent || {}).map(function (k) { return '<span class="pill">' + h(k) + ': ' + u.byEvent[k] + '</span>'; }).join(' ');
         return '<tr><td><b>' + h(u.name || u.email) + '</b><div class="muted" style="font-size:12px">' + h(u.email) + '</div></td>' +
-          '<td>' + h(u.role || '—') + '</td><td><b>' + u.logins + '</b></td><td><b>' + u.totalActions + '</b></td>' +
+          '<td>' + h(roleName(u.role) || '—') + '</td><td><b>' + u.logins + '</b></td><td><b>' + u.totalActions + '</b></td>' +
           '<td>' + u.ticketsCreated + '</td><td>' + u.comments + '</td><td class="muted">' + fmt(u.lastActive) + '</td><td>' + (ev || '—') + '</td></tr>';
       }).join('');
       $('content').innerHTML =
@@ -847,7 +849,7 @@
       }).join('') || '<li class="muted">Nothing yet — raise a ticket or comment to get started.</li>';
 
       $('content').innerHTML =
-        '<div class="page-head"><h2>My Activity</h2><span class="pill">' + h(d.role) + '</span></div>' +
+        '<div class="page-head"><h2>My Activity</h2><span class="pill">' + h(roleName(d.role)) + '</span></div>' +
         '<div class="clock-card">' +
           '<div class="clock-time" id="liveClock">--:--:--</div>' +
           '<div class="clock-date" id="liveDate"></div>' +
@@ -882,8 +884,8 @@
         return '<table class="tbl"><thead><tr><th>' + label + '</th><th>Value</th></tr></thead><tbody>' +
           keys.map(function (k) { return '<tr><td>' + h(k) + '</td><td><b>' + h(obj[k]) + '</b></td></tr>'; }).join('') + '</tbody></table>';
       }
-      var active = d.mostActive.slice(0, 8).map(function (u) { return '<tr><td>' + h(u.name || u.email) + '</td><td>' + h(u.role) + '</td><td>' + u.logins + '</td><td>' + u.totalActions + '</td></tr>'; }).join('');
-      var inactive = d.inactiveMembers.map(function (u) { return '<tr><td>' + h(u.name) + '</td><td>' + h(u.email) + '</td><td>' + h(u.role) + '</td><td class="muted">' + fmt(u.lastLoginAt) + '</td></tr>'; }).join('');
+      var active = d.mostActive.slice(0, 8).map(function (u) { return '<tr><td>' + h(u.name || u.email) + '</td><td>' + h(roleName(u.role)) + '</td><td>' + u.logins + '</td><td>' + u.totalActions + '</td></tr>'; }).join('');
+      var inactive = d.inactiveMembers.map(function (u) { return '<tr><td>' + h(u.name) + '</td><td>' + h(u.email) + '</td><td>' + h(roleName(u.role)) + '</td><td class="muted">' + fmt(u.lastLoginAt) + '</td></tr>'; }).join('');
 
       $('content').innerHTML =
         '<div class="page-head"><h2>Analytics</h2><div class="inline">' +
@@ -895,7 +897,7 @@
         '<div class="section"><h4>By priority</h4>' + tableFrom(d.byPriority, 'Priority') + '</div></div>' +
         '<div class="grid2"><div class="section"><h4>By cluster</h4>' + tableFrom(d.byCluster, 'Cluster') + '</div>' +
         '<div class="section"><h4>By category</h4>' + tableFrom(d.byCategory, 'Category') + '</div></div>' +
-        '<div class="grid2"><div class="section"><h4>Avg first-assign (hrs) by CBA</h4>' + tableFrom(d.avgFirstAssignHrsByCba, 'CBA') + '</div>' +
+        '<div class="grid2"><div class="section"><h4>Avg first-assign (hrs) by Manager</h4>' + tableFrom(d.avgFirstAssignHrsByCba, 'Manager') + '</div>' +
         '<div class="section"><h4>Avg resolution (hrs) by analyst</h4>' + tableFrom(d.avgResolveHrsByAnalyst, 'Analyst') + '</div></div>' +
         '<div class="section"><h4>Avg rating by analyst</h4>' + tableFrom(d.avgRatingByAnalyst, 'Analyst') + '</div>' +
         '<div class="section"><h4>Most active (30d)</h4><div class="table-wrap"><table class="tbl"><thead><tr><th>User</th><th>Role</th><th>Logins</th><th>Actions</th></tr></thead><tbody>' + (active || '<tr><td colspan="4" class="muted">No data</td></tr>') + '</tbody></table></div></div>' +
@@ -926,18 +928,19 @@
 
   function renderTicketDetail(t) {
     var u = state.user, role = u.role;
-    var isCba = role === 'CBA' || role === 'ADMIN';
+    // A ticket's "manager" is its cluster's CBA; admins count as managers everywhere.
+    var isManager = role === 'CBA' || role === 'ADMIN';
     var isAssignee = !!t.analystEmail && t.analystEmail === u.email;
     var isOwner = t.raisedByEmail === u.email;
 
     var actions = [];
     var openStatus = ['CLOSED','RESOLVED'].indexOf(t.status) < 0;
-    if (isCba && openStatus) {
+    if (isManager && openStatus) {
       actions.push('<button class="btn primary small" id="actAssign">' + (t.analystEmail ? 'Reassign' : 'Assign / take') + '</button>');
       actions.push('<button class="btn small" id="actApproval">Request external approval</button>');
     }
-    // A requester who isn't a CBA/admin can still take their own ticket.
-    if (isOwner && !isCba && !isAssignee && openStatus) {
+    // A requester who isn't a manager/admin can still take their own ticket.
+    if (isOwner && !isManager && !isAssignee && openStatus) {
       actions.push('<button class="btn primary small" id="actTake">Take it myself</button>');
     }
     if (isAssignee && role !== 'USER') {
@@ -949,7 +952,14 @@
       if (t.status === 'ON_HOLD') actions.push('<button class="btn primary small" id="actResume">Resume</button>');
       if (role === 'ANALYST' && t.status !== 'CLOSED') actions.push('<button class="btn small" id="actReassign">Request reassignment</button>');
     }
-    if (isOwner && t.status !== 'CLOSED') actions.push('<button class="btn success small" id="actClose">' + (t.status === 'RESOLVED' ? 'Accept &amp; close' : 'Mark as done') + '</button>');
+    // Managers/admins can resolve any open ticket directly, even someone else's.
+    if (isManager && openStatus && !actions.some(function (x) { return x.indexOf('actResolve') >= 0; })) {
+      actions.push('<button class="btn success small" id="actResolve">Mark resolved</button>');
+    }
+    // Requester, the manager or an admin can close it.
+    if (t.status !== 'CLOSED' && (isOwner || isManager)) {
+      actions.push('<button class="btn success small" id="actClose">' + (t.status === 'RESOLVED' ? 'Accept &amp; close' : 'Mark as done') + '</button>');
+    }
     if (isOwner && ['RESOLVED','CLOSED'].indexOf(t.status) >= 0) actions.push('<button class="btn small" id="actReopen">Reopen</button>');
     if (isOwner && t.status === 'CLOSED' && !t.rating) actions.push('<button class="btn primary small" id="actRate">Rate this ticket</button>');
 
@@ -972,7 +982,7 @@
     var timeline = (t.logs || []).map(function (l) {
       var diff = (l.oldValue || l.newValue) ? ' (' + h(l.oldValue || '—') + ' → ' + h(l.newValue || '—') + ')' : '';
       return '<li><div class="tl-top"><span class="tl-what">' + h(l.action) + '</span><span class="tl-when">' + fmt(l.at) + '</span></div>' +
-        '<div class="tl-det">' + h(l.byEmail) + (l.byRole ? ' · ' + h(l.byRole) : '') + diff + (l.note ? ' — ' + h(l.note) : '') + '</div></li>';
+        '<div class="tl-det">' + h(l.byEmail) + (l.byRole ? ' · ' + h(roleName(l.byRole)) : '') + diff + (l.note ? ' — ' + h(l.note) : '') + '</div></li>';
     }).join('') || '<li><div class="tl-det">No activity yet.</div></li>';
 
     $('drawerPanel').innerHTML =
@@ -1057,6 +1067,7 @@
     call('myAnalysts', {}).then(function (analysts) {
       if (!analysts.length) { toast('No analysts in this cluster yet.', 'err'); return; }
       openModal('Assign / take ticket', '<p class="muted">Ticket ' + h(t.ticketId) + ' · ' + h(t.clusterId) + '</p>' +
+        '<p class="muted" style="font-size:12px;margin-top:-4px">Pick <b>yourself</b> from the list to take this ticket.</p>' +
         '<div class="field"><label>Assign to</label><select id="selAnalyst">' +
           analysts.map(function (a) { return '<option value="' + h(a.email) + '">' + h(a.name) + ' (' + h(a.email) + ')</option>'; }).join('') +
         '</select></div><div class="field"><label>Note (optional)</label><input id="assignNote"></div>',
@@ -1072,7 +1083,7 @@
     call('myAnalysts', {}).then(function (analysts) {
       var others = analysts.filter(function (a) { return a.email !== state.user.email; });
       if (!others.length) { toast('No other analysts available.', 'err'); return; }
-      openModal('Request reassignment', '<p class="muted">This goes to your CBA for approval.</p>' +
+      openModal('Request reassignment', '<p class="muted">This goes to your manager for approval.</p>' +
         '<div class="field"><label>Reassign to</label><select id="selTo">' +
           others.map(function (a) { return '<option value="' + h(a.email) + '">' + h(a.name) + ' (' + h(a.email) + ')</option>'; }).join('') +
         '</select></div><div class="field"><label>Reason</label><textarea id="reassignReason"></textarea></div>',
