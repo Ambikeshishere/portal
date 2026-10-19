@@ -10,9 +10,12 @@ window.PW_CONFIG = {
   API_URL: '/api',
 
   FIREBASE: {
-    apiKey: '',
-    authDomain: '',
-    projectId: '',
-    appId: ''
+    apiKey: 'AIzaSyBT0csjQoLFx8-dXVCyMICMQFOObROsJoI',
+    authDomain: 'icjhasfd.firebaseapp.com',
+    projectId: 'icjhasfd',
+    storageBucket: 'icjhasfd.firebasestorage.app',
+    messagingSenderId: '143759872982',
+    appId: '1:143759872982:web:3aca60d8f0a5e9f8e68a77',
+    measurementId: 'G-EF189891TW'
   }
 };

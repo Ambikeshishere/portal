@@ -1,6 +1,18 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+
+/* Load .env.local (if present) before anything reads config from the environment. */
+try {
+  const envFile = path.join(__dirname, '..', '.env.local');
+  if (fs.existsSync(envFile)) {
+    fs.readFileSync(envFile, 'utf8').split('\n').forEach((line) => {
+      const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, '');
+    });
+  }
+} catch (e) { /* ignore malformed env file */ }
+
 const apiHandler = require('../api/index');
 
 const PORT = process.env.PORT || 3000;
