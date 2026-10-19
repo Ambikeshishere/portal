@@ -3,8 +3,15 @@
 A fast, serverless rebuild of the PW Analytics Ticket Portal. The original
 front-end (design + behaviour) is preserved exactly; the backend was moved off
 Google Sheets onto **Vercel serverless functions + Turso (libSQL)**, while all
-email (OTP + workflow notifications) is still sent through a dedicated
+email (workflow notifications, digests) is still sent through a dedicated
 **Google Apps Script mail service** using the PW internal Gmail account.
+
+Sign-in uses **Firebase Auth (Google)**: the browser gets an ID token from the
+Google popup, the backend verifies it locally (RS256 against Google's JWKS) and
+resolves the role from the `users` table — known `ANALYST`/`CBA`/`ADMIN` emails
+keep their role, unknown `pw.live` emails are auto-provisioned as `USER`
+(admins grant elevated roles later from the web admin panel). The old
+email-OTP APIs remain available as a fallback.
 
 ```
 Browser (index.html + js/ui.js)
@@ -42,11 +49,12 @@ portal/
   api/index.js        Vercel entry point: routes /api, /api/health, /api/cron/*
   lib/
     config.js         env-driven config (no secrets in code)
-    db.js             Turso/libSQL client, q()/run()/sha256()/nextId()
+    db.js             Turso/libSQL client, q()/run()/nextId()
     schema.sql        all tables (snake_case)
     settings.js       roles, DEFAULT_CONFIG, cfg()/cfgNum(), SLA due dates
     helpers.js        now(), randomToken(), randomOtp(), normEmail(), …
-    auth.js           signup, requestOtp, verifyOtp, sessions
+    auth.js           signup, requestOtp, verifyOtp, loginWithFirebase, sessions
+    firebase.js       Firebase ID-token verification (RS256 + Google JWKS, no deps)
     tickets.js        create/list/get/assign/updateStatus/close/reopen/rate/comment/dashboard
     approvals.js      request / getInfo / decide (tokenised email links)
     reassign.js       request / list / decide
@@ -58,10 +66,11 @@ portal/
   dev/server.js       local dev server (static + /api)
   test/smoke.js       USER flow smoke test (19 assertions)
   test/smoke2.js      CBA/ANALYST/ADMIN flow smoke test (33 assertions)
+  test/coverage.js    every exported function across lib/ (146 assertions)
   index.html          front-end (unchanged design)
-  js/config.js        API_URL = '/api'
+  js/config.js        API_URL + FIREBASE web config placeholders
   js/api.js           transport (POST + JSONP fallback)
-  js/ui.js            all UI logic (unchanged)
+  js/ui.js            all UI logic (Google sign-in wiring)
   styles.css          styles (unchanged)
   vercel.json         /api/* → serverless function
 ```
@@ -84,6 +93,7 @@ Set these in **Vercel → Project → Settings → Environment Variables** (Prod
 | `MAIL_KEY` | Shared secret; must match `MAIL_KEY` in `ref-script-2/Config.js` |
 | `CRON_SECRET` | Shared secret; must match `CRON_SECRET` in `ref-script-2/Config.js` |
 | `PORTAL_BASE_URL` | Public portal URL, e.g. `https://pw-ticket-portal.vercel.app` |
+| `FIREBASE_PROJECT_ID` | Firebase project id (Google sign-in audience/issuer checks) |
 
 `lib/config.js` reads all of these from the environment — **no secrets are
 committed to the repo**. For local development, copy `.env.example` to
@@ -94,11 +104,31 @@ committed to the repo**. For local development, copy `.env.example` to
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # runs test/smoke.js + test/smoke2.js (mail is stubbed)
+npm test             # smoke.js + smoke2.js + coverage.js (mail is stubbed)
 ```
 
-The smoke tests spin up a throwaway `file:` libSQL database, stub the mail
-service, and exercise the full API surface — no network, no real email.
+The tests spin up a throwaway `file:` libSQL database, stub the mail service,
+and exercise the full API surface — no network, no real email (Firebase tokens
+are unit-tested with crafted RS256 JWTs against an injected test key).
+
+## Firebase (Google sign-in) setup
+
+1. **Firebase console** → your project → *Authentication → Sign-in method →
+   Google* → enable it, set the support email.
+2. *Authentication → Settings → Authorized domains* → add `localhost` and
+   `pw-ticket-portal.vercel.app`.
+3. *Project settings → Your apps → SDK setup → Config* → copy the
+   `firebaseConfig` values into `js/config.js` (`FIREBASE: { apiKey, authDomain,
+   projectId, appId }`). The "Continue with Google" button only works once this
+   is filled in.
+4. Set `FIREBASE_PROJECT_ID` in `.env.local` (and in Vercel env vars) to the
+   same project id. The backend verifies ID tokens locally — no Firebase
+   server SDK, no extra npm dependencies.
+
+Roles are **always** read from the `users` table at login time: an email
+already saved as `ANALYST`/`CBA`/`ADMIN` keeps that role, everything else is
+provisioned as `USER` (with a welcome email; its cluster/phone/department can
+be filled in later from the admin *Users* screen).
 
 ## Deployment
 
@@ -111,8 +141,8 @@ service, and exercise the full API surface — no network, no real email.
 
 ## API surface
 
-**Public** (no session): `signup`, `requestOtp`, `verifyOtp`, `getClusters`,
-`getApproval`, `decideApproval`.
+**Public** (no session): `signup`, `requestOtp`, `verifyOtp`,
+`loginWithFirebase`, `getClusters`, `getApproval`, `decideApproval`.
 
 **Private** (session + role guard): `logout`, `me`, `createTicket`,
 `listTickets`, `getTicket`, `addComment`, `assignTicket`, `updateStatus`,
@@ -137,10 +167,16 @@ service, and exercise the full API surface — no network, no real email.
 
 ## Security notes
 
+- Sign-in goes through Firebase (Google) ID tokens: the backend checks the
+  RS256 signature against Google's JWKS, the issuer/audience against
+  `FIREBASE_PROJECT_ID`, expiry, and `email_verified`, then enforces
+  `ALLOWED_DOMAIN` (`pw.live`).
 - OTPs, session tokens, and approval tokens are stored as plain values
   (no hashing or salt).
 - Signup is locked to the `ALLOWED_DOMAIN` (`pw.live`).
-- Signup always creates a `USER`; elevated roles are granted only by an admin.
+- Signup always creates a `USER`; elevated roles are granted only by an admin
+  (or preserved for emails the admin already entered with a role).
+- Inactive accounts are rejected at login.
 - Cron endpoints reject requests without the correct `x-cron-secret`.
 - Secrets live only in Vercel env vars and the Apps Script project — never in
   this repo.

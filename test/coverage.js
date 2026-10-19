@@ -4,6 +4,7 @@ const fs = require('fs');
 const dbFile = path.join(__dirname, 'coverage.db');
 try { fs.unlinkSync(dbFile); } catch (e) {}
 process.env.DB_URL = 'file:' + dbFile;
+process.env.FIREBASE_PROJECT_ID = 'pw-test-proj';   // must be set before lib/config is loaded
 
 const mail = require('../lib/mail');
 const sent = [];
@@ -20,6 +21,8 @@ const reassign = require('../lib/reassign');
 const admin = require('../lib/admin');
 const jobs = require('../lib/jobs');
 const routes = require('../lib/routes');
+const firebaseMod = require('../lib/firebase');
+const realVerify = firebaseMod.verifyIdToken;   // keep the real verifier before any stubbing
 
 let pass = 0, fail = 0;
 const ok = (cond, label) => { if (cond) { pass++; console.log('  \x1b[32m✓\x1b[0m ' + label); } else { fail++; console.log('  \x1b[31m✗\x1b[0m ' + label); } };
@@ -148,6 +151,73 @@ async function main() {
   const rmAn = await admin.removeAnalyst({ email: 'ambikesh.srivastava@pw.live', role: 'ADMIN' }, { email: 'an3@pw.live' });
   ok(rmAn.removed, 'removeAnalyst');
   try { await admin.removeAnalyst({ role: 'ADMIN' }, { email: 'not-an-analyst@pw.live' }); ok(false, 'removeAnalyst not found'); } catch (e) { ok(true, 'removeAnalyst not found'); }
+
+  console.log('\n── firebase: ID-token verification ──');
+  const cryptoMod = require('crypto');
+  const kp = cryptoMod.generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const testJwk = Object.assign({}, kp.publicKey.export({ format: 'jwk' }), { kid: 'test-key', alg: 'RS256', use: 'sig' });
+  firebaseMod.setKeysForTest([testJwk]);
+  const b64u = (s) => Buffer.from(s).toString('base64url');
+  const makeJwt = (payload, hdr) => {
+    const h = b64u(JSON.stringify(Object.assign({ alg: 'RS256', kid: 'test-key', typ: 'JWT' }, hdr || {})));
+    const b = b64u(JSON.stringify(payload));
+    const sig = cryptoMod.sign('RSA-SHA256', Buffer.from(h + '.' + b), kp.privateKey).toString('base64url');
+    return h + '.' + b + '.' + sig;
+  };
+  const baseClaims = () => ({
+    iss: 'https://securetoken.google.com/pw-test-proj', aud: 'pw-test-proj',
+    sub: 'google-oauth2|123', email: 'token.user@pw.live', email_verified: true,
+    name: 'Token User', iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 600
+  });
+  const vGood = await realVerify(makeJwt(baseClaims()));
+  ok(vGood.email === 'token.user@pw.live' && vGood.name === 'Token User', 'verifyIdToken valid token');
+  try { await realVerify('not.a.jwt'); ok(false, 'malformed token rejected'); } catch (e) { ok(true, 'malformed token rejected'); }
+  try { await realVerify(makeJwt(baseClaims(), { alg: 'HS256' })); ok(false, 'non-RS256 rejected'); } catch (e) { ok(e.message.includes('algorithm'), 'non-RS256 rejected'); }
+  try { await realVerify(makeJwt(Object.assign(baseClaims(), { exp: Math.floor(Date.now() / 1000) - 10 }))); ok(false, 'expired token rejected'); } catch (e) { ok(e.message.includes('expired'), 'expired token rejected'); }
+  try { await realVerify(makeJwt(Object.assign(baseClaims(), { aud: 'other-proj' }))); ok(false, 'wrong audience rejected'); } catch (e) { ok(e.message.includes('audience'), 'wrong audience rejected'); }
+  try { await realVerify(makeJwt(Object.assign(baseClaims(), { iss: 'https://securetoken.google.com/other' }))); ok(false, 'wrong issuer rejected'); } catch (e) { ok(e.message.includes('issuer'), 'wrong issuer rejected'); }
+  try { await realVerify(makeJwt(Object.assign(baseClaims(), { email_verified: false }))); ok(false, 'unverified email rejected'); } catch (e) { ok(e.message.includes('verified'), 'unverified email rejected'); }
+  try { await realVerify(makeJwt(Object.assign(baseClaims(), { email: '' }))); ok(false, 'no email rejected'); } catch (e) { ok(e.message.includes('email'), 'no email rejected'); }
+  try { await realVerify(makeJwt(baseClaims(), { kid: 'unknown-kid' })); ok(false, 'unknown kid rejected'); } catch (e) { ok(e.message.includes('key not found'), 'unknown kid rejected'); }
+  const forgedParts = makeJwt(baseClaims()).split('.');
+  forgedParts[1] = b64u(JSON.stringify(Object.assign(baseClaims(), { email: 'forged@pw.live' })));
+  try { await realVerify(forgedParts.join('.')); ok(false, 'tampered payload rejected'); } catch (e) { ok(e.message.includes('signature'), 'tampered payload rejected'); }
+  const cfgObj = require('../lib/config');
+  const savedProj = cfgObj.FIREBASE_PROJECT_ID;
+  cfgObj.FIREBASE_PROJECT_ID = '';
+  try { await realVerify(makeJwt(baseClaims())); ok(false, 'missing project id rejected'); } catch (e) { ok(e.message.includes('not configured'), 'missing project id rejected'); }
+  cfgObj.FIREBASE_PROJECT_ID = savedProj;
+
+  // From here on, stub the verifier (no network in tests): idToken 'fb:<email>' → that email.
+  firebaseMod.verifyIdToken = async (tok) => {
+    const t = String(tok || '');
+    if (t.startsWith('fb:')) return { email: t.slice(3), name: 'Stub Google User', picture: '', sub: 'stub-sub' };
+    throw new Error('Invalid Firebase token.');
+  };
+
+  console.log('\n── auth: loginWithFirebase ──');
+  const fb1 = await auth.loginWithFirebase({ idToken: 'fb:newuser@pw.live' });
+  ok(fb1.provisioned === true && fb1.user.role === 'USER' && fb1.token, 'unknown email auto-provisioned as USER');
+  ok(/^U-\d{5}$/.test(fb1.user.userId), 'provisioned user got U-##### id');
+  const fbSess = await auth.requireSession(fb1.token);
+  ok(fbSess.email === 'newuser@pw.live', 'firebase session token works');
+  ok(sent.some(s => s.tpl === 'welcome' && s.to === 'newuser@pw.live'), 'welcome mail for provisioned user');
+  const fb2 = await auth.loginWithFirebase({ idToken: 'fb:newuser@pw.live' });
+  ok(fb2.provisioned === false && fb2.user.userId === fb1.user.userId, 'relogin does not re-provision');
+  const fbAn = await auth.loginWithFirebase({ idToken: 'fb:an1@pw.live' });
+  ok(fbAn.user.role === 'ANALYST' && !fbAn.provisioned, 'existing ANALYST keeps role');
+  const fbAdm = await auth.loginWithFirebase({ idToken: 'fb:ambikesh.srivastava@pw.live' });
+  ok(fbAdm.user.role === 'ADMIN' && !fbAdm.provisioned, 'existing ADMIN keeps role');
+  try { await auth.loginWithFirebase({ idToken: 'fb:someone@gmail.com' }); ok(false, 'foreign domain rejected'); } catch (e) { ok(e.message.includes('pw.live'), 'foreign domain rejected'); }
+  try { await auth.loginWithFirebase({ idToken: 'garbage' }); ok(false, 'bad token rejected'); } catch (e) { ok(e.message.includes('Invalid'), 'bad token rejected'); }
+  try { await auth.loginWithFirebase({}); ok(false, 'missing token rejected'); } catch (e) { ok(true, 'missing token rejected'); }
+  await db.run("UPDATE users SET status='INACTIVE' WHERE email='emp1@pw.live'");
+  try { await auth.loginWithFirebase({ idToken: 'fb:emp1@pw.live' }); ok(false, 'inactive user rejected'); } catch (e) { ok(e.message.includes('inactive'), 'inactive user rejected'); }
+  await db.run("UPDATE users SET status='ACTIVE' WHERE email='emp1@pw.live'");
+  const fbRoute = await routes.handle({ api: 'loginWithFirebase', payload: { idToken: 'fb:newuser@pw.live' } });
+  ok(fbRoute.ok && fbRoute.data.token && fbRoute.data.user.email === 'newuser@pw.live', 'loginWithFirebase exposed in PUBLIC_API');
+  // restore the real verifier for anything that might use it later
+  firebaseMod.verifyIdToken = realVerify;
 
   console.log('\n── tickets: create + assign ──');
   const ct1 = await tickets.create({ ...vo2.user, email: 'user1@pw.live', role: 'USER', cluster_id: clId, name: 'User One', phone: '9876543210', department: 'Analytics', Role: 'USER' }, { title: 'Fix dashboard', description: 'charts broken', priority: 'High', category: 'Data' });

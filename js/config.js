@@ -1,10 +1,18 @@
 /* ============================================================
    config.js — front-end configuration
-   Paste your deployed Apps Script Web App URL below (it ends
-   with /exec). This is the only file you edit to point the
-   portal at your backend.
+   API_URL  : backend endpoint (same origin in production).
+   FIREBASE : Firebase web app config for "Continue with Google".
+              Get it from Firebase console → Project settings →
+              Your apps → SDK setup → Config (firebaseConfig).
+              Leave it empty to hide Google sign-in.
    ============================================================ */
 window.PW_CONFIG = {
-  // Deployed Apps Script Web App (JSON API) endpoint:
   API_URL: '/api',
+
+  FIREBASE: {
+    apiKey: '',
+    authDomain: '',
+    projectId: '',
+    appId: ''
+  }
 };

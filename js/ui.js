@@ -206,11 +206,8 @@
   function wireAuth() {
     $('toSignup').onclick = function (e) { e.preventDefault(); toggleAuth(true); };
     $('toLogin').onclick = function (e) { e.preventDefault(); toggleAuth(false); };
-    $('btnSendOtp').onclick = sendOtp;
-    $('btnResendOtp').onclick = sendOtp;
-    $('btnVerifyOtp').onclick = verifyOtp;
     $('btnSignup').onclick = doSignup;
-    $('loginOtp').addEventListener('keydown', function (e) { if (e.key === 'Enter') verifyOtp(); });
+    $('btnGoogleLogin').onclick = firebaseLogin;
   }
   function toggleAuth(signup) {
     $('loginPane').classList.toggle('hidden', signup);
@@ -224,31 +221,36 @@
       }).join('');
     }).catch(function () {});
   }
-  function sendOtp() {
-    var email = $('loginEmail').value.trim();
-    if (!email) { toast('Enter your email', 'err'); return; }
-    var b = $('btnSendOtp'); b.disabled = true; b.innerHTML = spin() + ' Sending…';
-    call('requestOtp', { email: email }).then(function (d) {
-      $('otpBlock').classList.remove('hidden');
-      $('otpReveal').classList.remove('hidden');
-      $('otpReveal').innerHTML = d.message || 'If this email is registered, we\'ve sent a one-time code. Check your inbox.';
-      toast('If registered, an OTP was sent', 'ok');
-      $('loginOtp').focus();
-    }).catch(function (e) { toast(e.message, 'err'); })
-      .then(function () { b.disabled = false; b.textContent = 'Send OTP'; });
+  function firebaseReady() {
+    var F = (window.PW_CONFIG && window.PW_CONFIG.FIREBASE) || {};
+    return !!(F.apiKey && F.authDomain && F.projectId && typeof firebase !== 'undefined');
   }
-  function verifyOtp() {
-    var email = $('loginEmail').value.trim();
-    var code = $('loginOtp').value.trim();
-    if (!code) { toast('Enter the OTP', 'err'); return; }
-    var b = $('btnVerifyOtp'); b.disabled = true; b.innerHTML = spin() + ' Verifying…';
-    call('verifyOtp', { email: email, code: code }).then(function (d) {
+  /* Google popup → idToken → portal session (roles come from the users table). */
+  function firebaseLogin() {
+    if (!firebaseReady()) { toast('Google sign-in is not configured yet.', 'err'); return; }
+    if (!firebase.apps.length) firebase.initializeApp(window.PW_CONFIG.FIREBASE);
+    var provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    var b = $('btnGoogleLogin'); b.disabled = true; b.innerHTML = spin() + ' Opening Google…';
+    firebase.auth().signInWithPopup(provider).then(function (res) {
+      var u = res && res.user;
+      if (!u) throw new Error('Google did not return an account.');
+      return u.getIdToken();
+    }).then(function (idToken) {
+      return call('loginWithFirebase', { idToken: idToken });
+    }).then(function (d) {
       state.token = d.token; state.user = d.user;
       localStorage.setItem('pw_token', d.token);
       storeUser(d.user);
+      if (d.provisioned) toast('Welcome! Your account was created.', 'ok');
       enterApp();
-    }).catch(function (e) { toast(e.message, 'err'); })
-      .then(function () { b.disabled = false; b.textContent = 'Verify & Sign in'; });
+    }).catch(function (e) {
+      var msg = (e && e.message) || 'Google sign-in failed.';
+      if (e && e.code === 'auth/popup-closed-by-user') msg = 'Sign-in was cancelled.';
+      else if (e && e.code === 'auth/cancelled-popup-request') msg = 'Sign-in was cancelled.';
+      else if (e && e.code === 'auth/popup-blocked') msg = 'The browser blocked the Google popup. Allow popups for this site and try again.';
+      toast(msg, 'err');
+    }).then(function () { b.disabled = false; b.textContent = 'Continue with Google'; });
   }
   function doSignup() {
     var payload = {
@@ -258,16 +260,16 @@
     };
     var b = $('btnSignup'); b.disabled = true; b.innerHTML = spin() + ' Creating…';
     call('signup', payload).then(function () {
-      toast('Account created. Sign in with OTP.', 'ok');
+      toast('Account created. Continue with Google to sign in.', 'ok');
       toggleAuth(false);
-      $('loginEmail').value = payload.email;
-      $('otpBlock').classList.add('hidden');
-      $('otpReveal').classList.add('hidden');
     }).catch(function (e) { toast(e.message, 'err'); })
       .then(function () { b.disabled = false; b.textContent = 'Create account'; });
   }
   function doLogout(silent) {
     if (!silent && state.token) { try { API.call('logout', state.token, { token: state.token }); } catch (e) {} }
+    if (typeof firebase !== 'undefined' && firebase.apps.length) {
+      try { firebase.auth().signOut(); } catch (e) {}
+    }
     clearSession();
     location.hash = '';
     location.reload();

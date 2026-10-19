@@ -83,20 +83,8 @@
       </div>
 
       <div id="loginPane">
-        <div class="field">
-          <label>Email address</label>
-          <input id="loginEmail" type="email" placeholder="you@pw.live" autocomplete="email">
-        </div>
-        <button class="btn primary block" id="btnSendOtp">Send OTP</button>
-        <div id="otpReveal" class="otp-reveal hidden"></div>
-        <div id="otpBlock" class="hidden">
-          <div class="field">
-            <label>Enter the 6-digit OTP</label>
-            <input id="loginOtp" class="otp-input" inputmode="numeric" maxlength="6" placeholder="______">
-          </div>
-          <button class="btn primary block" id="btnVerifyOtp">Verify &amp; Sign in</button>
-          <button class="btn link block" id="btnResendOtp">Resend OTP</button>
-        </div>
+        <p class="muted center">Sign in with your official Google account.</p>
+        <button class="btn primary block" id="btnGoogleLogin">Continue with Google</button>
         <p class="muted center" style="margin-top:16px">
           New here? <a href="#" id="toSignup">Create an account</a>
         </p>
@@ -170,6 +158,8 @@
 </div>
 <div id="toast" class="toast hidden"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script src="js/config.js"></script>
 <script src="js/api.js"></script>
 <script src="js/ui.js"></script>
