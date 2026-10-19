@@ -67,7 +67,7 @@ portal/
   test/smoke.js       USER flow smoke test (19 assertions)
   test/smoke2.js      CBA/ANALYST/ADMIN flow smoke test (33 assertions)
   test/coverage.js    every exported function across lib/ (146 assertions)
-  index.html          front-end (unchanged design)
+  index.html          front-end: Google sign-in card (no self-signup form)
   js/config.js        API_URL + FIREBASE web config placeholders
   js/api.js           transport (POST + JSONP fallback)
   js/ui.js            all UI logic (Google sign-in wiring)
@@ -176,7 +176,9 @@ be filled in later from the admin *Users* screen).
 - OTPs, session tokens, and approval tokens are stored as plain values
   (no hashing or salt).
 - Signup is locked to the `ALLOWED_DOMAIN` (`pw.live`).
-- Signup always creates a `USER`; elevated roles are granted only by an admin
+- There is no self-signup form in the UI: a new @pw.live Google account is
+  auto-provisioned as `USER` on first sign-in.
+- Elevated roles are granted only by an admin
   (or preserved for emails the admin already entered with a role).
 - Inactive accounts are rejected at login.
 - Cron endpoints reject requests without the correct `x-cron-secret`.

@@ -199,27 +199,11 @@
   function showAuth() {
     $('authScreen').classList.remove('hidden');
     $('mainScreen').classList.add('hidden');
-    loadClustersInto('suCluster');
   }
 
   /* ------------------------------ auth ------------------------------- */
   function wireAuth() {
-    $('toSignup').onclick = function (e) { e.preventDefault(); toggleAuth(true); };
-    $('toLogin').onclick = function (e) { e.preventDefault(); toggleAuth(false); };
-    $('btnSignup').onclick = doSignup;
     $('btnGoogleLogin').onclick = firebaseLogin;
-  }
-  function toggleAuth(signup) {
-    $('loginPane').classList.toggle('hidden', signup);
-    $('signupPane').classList.toggle('hidden', !signup);
-  }
-  function loadClustersInto(id) {
-    call('getClusters', {}).then(function (list) {
-      var sel = $(id); if (!sel) return;
-      sel.innerHTML = '<option value="">Select…</option>' + list.map(function (c) {
-        return '<option value="' + h(c.clusterId) + '">' + h(c.name) + '</option>';
-      }).join('');
-    }).catch(function () {});
   }
   function firebaseReady() {
     var F = (window.PW_CONFIG && window.PW_CONFIG.FIREBASE) || {};
@@ -297,19 +281,6 @@
     storeUser(d.user);
     if (d.provisioned) toast('Welcome! Your account was created.', 'ok');
     enterApp();
-  }
-  function doSignup() {
-    var payload = {
-      name: $('suName').value.trim(), email: $('suEmail').value.trim(),
-      phone: $('suPhone').value.trim(), department: $('suDepartment').value,
-      clusterId: $('suCluster').value, defaultPriority: $('suPriority').value
-    };
-    var b = $('btnSignup'); b.disabled = true; b.innerHTML = spin() + ' Creating…';
-    call('signup', payload).then(function () {
-      toast('Account created. Continue with Google to sign in.', 'ok');
-      toggleAuth(false);
-    }).catch(function (e) { toast(e.message, 'err'); })
-      .then(function () { b.disabled = false; b.textContent = 'Create account'; });
   }
   function doLogout(silent) {
     if (!silent && state.token) { try { API.call('logout', state.token, { token: state.token }); } catch (e) {} }
