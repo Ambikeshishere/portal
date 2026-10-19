@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node dev/server.js",
     "start": "node dev/server.js",
-    "test": "node test/smoke.js && node test/smoke2.js"
+    "test": "node test/smoke.js && node test/smoke2.js && node test/coverage.js"
   },
   "dependencies": {
     "@libsql/client": "^0.11.0"
