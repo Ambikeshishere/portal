@@ -289,6 +289,17 @@ async function main() {
   ok(adClose.status === 'CLOSED', 'ADMIN closes any ticket');
   ok(routes.PRIVATE_API.requestReassign.roles.indexOf('ADMIN') >= 0, 'ADMIN may request reassignment');
 
+  console.log('\n── manual deadline (SLA override) ──');
+  const future = new Date(Date.now() + 6 * 3600000).toISOString();
+  const ctD = await tickets.create(u1Obj, { title: 'Deadline ticket', description: 'manual due', force: true, dueAt: future });
+  ok(Math.abs(helpers.toMs(ctD.dueAt) - Date.parse(future)) < 1000, 'manual deadline stored at raise time');
+  const ctAuto = await tickets.create(u1Obj, { title: 'Auto SLA ticket', description: 'auto due', force: true });
+  ok(helpers.toMs(ctAuto.dueAt) > Date.now(), 'auto SLA when no deadline given');
+  try { await tickets.create(u1Obj, { title: 'Bad deadline ticket', description: 'x', force: true, dueAt: 'not-a-date' }); ok(false, 'invalid deadline rejected'); } catch (e) { ok(true, 'invalid deadline rejected'); }
+  try { await tickets.create(u1Obj, { title: 'Past deadline ticket', description: 'x', force: true, dueAt: '2020-01-01T00:00:00Z' }); ok(false, 'past deadline rejected'); } catch (e) { ok(true, 'past deadline rejected'); }
+  const gtD = await tickets.get(u1Obj, { ticketId: ctD.ticketId });
+  ok(gtD.logs.some(l => l.action === 'DEADLINE_SET'), 'DEADLINE_SET logged in timeline');
+
   console.log('\n── tickets: comment + visibility ──');
   const cm1 = await tickets.addComment({ email: 'user1@pw.live', role: 'USER', Role: 'USER', name: 'User One' }, { ticketId: tid1, text: 'hello' });
   ok(cm1.commentId === 'ok', 'addComment');

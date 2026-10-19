@@ -43,6 +43,12 @@
   function approvalBadge(s) { return s && s !== 'NONE' ? '<span class="badge ap-' + h(s) + '">' + h(s) + '</span>' : '<span class="muted">—</span>'; }
   function slaBadge(s) { return s && s !== '-' ? '<span class="badge ap-' + h(s) + '">' + h(String(s).replace('_', ' ')) + '</span>' : ''; }
   function debounce(fn, ms) { var t; return function () { var a = arguments, self = this; clearTimeout(t); t = setTimeout(function () { fn.apply(self, a); }, ms); }; }
+  /* datetime-local works in local wall time; the API takes UTC ISO. */
+  function toIso(v) { if (!v) return ''; var d = new Date(v); return isNaN(d.getTime()) ? v : d.toISOString(); }
+  function localDT(d) {
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
 
   /* --------------------------- api bridge ---------------------------- */
   /* Response cache. Apps Script answers in ~2.4s, so every view change used to
@@ -491,6 +497,10 @@
             ['Low','Medium','High'].map(function (p) { return '<option' + (p === (state.user.defaultPriority || 'Medium') ? ' selected' : '') + '>' + p + '</option>'; }).join('') +
           '</select></div>' +
         '</div>' +
+        '<div class="field"><label>Deadline (date &amp; time)</label>' +
+          '<input id="ntDue" type="datetime-local" min="' + localDT(new Date(Date.now() + 60000)) + '">' +
+          '<div class="muted" style="font-size:12px;margin-top:4px">Leave blank to use the SLA of the chosen priority. Set it to fix a custom deadline (SLA) for this ticket.</div>' +
+        '</div>' +
         '<div class="field"><label>Department</label><input id="ntDept" value="' + h(state.user.department || '') + '"></div>' +
         (canAssign ? '<div class="field"><label>Assign to</label><select id="ntAssign"><option value="">Leave unassigned</option></select>' +
           '<div class="muted" style="font-size:12px;margin-top:4px">' +
@@ -517,6 +527,7 @@
     call('createTicket', {
       title: $('ntTitle').value, category: $('ntCategory').value, priority: $('ntPriority').value,
       department: $('ntDept').value, description: $('ntDesc').value, force: force,
+      dueAt: toIso($('ntDue') ? $('ntDue').value : ''),
       assignTo: $('ntAssign') ? $('ntAssign').value : ''
     }).then(function (t) {
       if (t && t.duplicate) {

@@ -66,7 +66,7 @@ portal/
   dev/server.js       local dev server (static + /api)
   test/smoke.js       USER flow smoke test (19 assertions)
   test/smoke2.js      CBA (Manager)/ANALYST/ADMIN flow smoke test (33 assertions)
-  test/coverage.js    every exported function across lib/ (158 assertions)
+  test/coverage.js    every exported function across lib/ (163 assertions)
   index.html          front-end: Google sign-in card (no self-signup form)
   js/config.js        API_URL + FIREBASE web config placeholders
   js/api.js           transport (POST + JSONP fallback)
@@ -169,6 +169,17 @@ everywhere (role dropdown, user/cluster tables, ticket timeline, analytics).
 | `CBA` (**Manager**) | Everything a USER can, plus take any ticket in their own cluster for themselves, resolve it directly, close it (even someone else's), assign analysts, request approvals, manage cluster analysts, decide reassignments |
 | `ANALYST` | Work assigned tickets, update status, request reassignment |
 | `ADMIN` | **Every right**: take any ticket in any cluster for themselves, assign to any manager/analyst, resolve or close any ticket, plus users, clusters, analytics, activity, CSV export |
+
+## Deadlines & SLA
+
+- Default due date comes from the priority: `High` = `SLA_HIGH_HRS` (24h),
+  `Medium` = `SLA_MED_HRS` (72h), `Low` = `SLA_LOW_HRS` (168h).
+- **Raise a ticket** has an optional **Deadline (date & time)** field. Fill it
+  in to fix a custom deadline (SLA) for that ticket; `createTicket` accepts the
+  extra `dueAt` (UTC ISO) key. Leave it blank to keep the priority SLA.
+- A manual deadline must be a real date-time in the future. It is stored in
+  `tickets.due_at`, drives the SLA badge (`ON_TRACK`/`DUE_SOON`/`BREACHED`) and
+  the hourly SLA job, and shows up in the ticket timeline as `DEADLINE_SET`.
 
 ## Security notes
 
