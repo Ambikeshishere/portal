@@ -103,8 +103,100 @@
   }
 
   /* ------------------------------ theme ------------------------------ */
-  function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); try { localStorage.setItem('pw_theme', t); } catch (e) {} }
-  function toggleTheme() { applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark'); }
+  /* modes: 'light' | 'dark' | 'auto'
+     'auto' follows the clock like the macOS dynamic wallpaper:
+     yellow at sunrise -> white at noon -> amber at sunset -> black at night. */
+  var THEME_MODES = ['light', 'dark', 'auto'];
+  var _autoHour = null;      // preview override, see window.__setAutoHour below
+  var _themeTimer = null;
+
+  function themeMode() { try { return localStorage.getItem('pw_theme') || 'auto'; } catch (e) { return 'auto'; } }
+  function currentHour() {
+    if (_autoHour !== null) return _autoHour;
+    var n = new Date(); return n.getHours() + n.getMinutes() / 60;
+  }
+  function daypartForHour(h) {
+    if (h >= 5 && h < 8) return 'dawn';    // sunrise, warm
+    if (h >= 8 && h < 17) return 'day';    // white
+    if (h >= 17 && h < 20) return 'dusk';  // sunset, amber
+    return 'night';                        // black
+  }
+  function mixRgb(a, b, t) {
+    return [Math.round(a[0] + (b[0] - a[0]) * t), Math.round(a[1] + (b[1] - a[1]) * t), Math.round(a[2] + (b[2] - a[2]) * t)];
+  }
+  function lumRgb(c) { return 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]; }
+  function cssRgb(c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')'; }
+
+  // sky colour per hour, interpolated between these stops:
+  // night black -> sunrise yellow -> noon white -> sunset amber -> black again by 8pm
+  var SKY_STOPS = [[0, [3, 3, 8]], [4, [3, 3, 8]], [6, [255, 176, 0]], [12, [255, 255, 255]],
+    [17.5, [255, 157, 46]], [20, [8, 8, 14]], [24, [3, 3, 8]]];
+  function skyColour(h) {
+    for (var i = 0; i < SKY_STOPS.length - 1; i++) {
+      var a = SKY_STOPS[i], b = SKY_STOPS[i + 1];
+      if (h >= a[0] && h <= b[0]) return mixRgb(a[1], b[1], (h - a[0]) / (b[0] - a[0]));
+    }
+    return SKY_STOPS[0][1];
+  }
+  function skyGradient(h) {
+    var c = skyColour(h), lift = 0.34 * (lumRgb(c) / 255);
+    return 'linear-gradient(180deg,' + cssRgb(mixRgb(c, [0, 0, 0], 0.22)) + ' 0%,' + cssRgb(c) + ' 46%,' +
+      cssRgb(mixRgb(c, [255, 255, 255], lift)) + ' 100%)';
+  }
+  function skyLayer(h) {
+    var el = document.getElementById('sky');
+    if (el) el.style.backgroundImage = skyGradient(h);
+  }
+
+  function applyTheme(mode) {
+    if (THEME_MODES.indexOf(mode) < 0) mode = 'auto';
+    try { localStorage.setItem('pw_theme', mode); } catch (e) {}
+    paintTheme(mode);
+  }
+
+  function paintTheme(mode) {
+    var root = document.documentElement, h = currentHour(), part = null, theme = mode;
+    if (mode === 'auto') { part = daypartForHour(h); theme = part === 'night' ? 'dark' : 'light'; skyLayer(h); }
+    root.setAttribute('data-theme', theme);
+    if (part) { root.setAttribute('data-auto', '1'); root.setAttribute('data-daypart', part); }
+    else { root.removeAttribute('data-auto'); root.removeAttribute('data-daypart'); }
+    var sw = document.getElementById('themeSwitch');
+    if (sw) {
+      var btns = sw.querySelectorAll('button[data-theme-opt]');
+      for (var i = 0; i < btns.length; i++) {
+        var on = btns[i].getAttribute('data-theme-opt') === mode;
+        btns[i].classList.toggle('on', on);
+        btns[i].setAttribute('aria-pressed', on ? 'true' : 'false');
+      }
+      var ab = sw.querySelector('button[data-theme-opt="auto"]');
+      if (ab) ab.title = part ? 'Auto — ' + part + ' · ' + theme : 'Auto — day / night';
+    }
+  }
+
+  function wireTheme() {
+    var sw = document.getElementById('themeSwitch');
+    if (sw && !sw._wired) {
+      sw._wired = true;
+      sw.addEventListener('click', function (e) {
+        var b = e.target && e.target.closest ? e.target.closest('button[data-theme-opt]') : null;
+        if (b) applyTheme(b.getAttribute('data-theme-opt'));
+      });
+    }
+    if (_themeTimer) clearInterval(_themeTimer);
+    // re-check every minute so auto flips on its own without a reload
+    _themeTimer = setInterval(function () { if (themeMode() === 'auto') paintTheme('auto'); }, 60000);
+  }
+
+  // preview helper: __setAutoHour(19.5) pins the clock for auto mode, __setAutoHour(null) restores the real time
+  window.__setAutoHour = function (h) {
+    _autoHour = (h === null || h === undefined) ? null : Number(h);
+    paintTheme(themeMode());
+    return {
+      mode: themeMode(), hour: currentHour(),
+      theme: document.documentElement.getAttribute('data-theme'),
+      daypart: document.documentElement.getAttribute('data-daypart')
+    };
+  };
 
   /* ------------------------------ clock ------------------------------ */
   var _clockTimer = null;
@@ -167,8 +259,8 @@
 
   /* ------------------------------ boot ------------------------------- */
   function boot() {
-    try { applyTheme(localStorage.getItem('pw_theme') || 'light'); } catch (e) { applyTheme('light'); }
-    $('btnTheme').onclick = toggleTheme;
+    try { applyTheme(themeMode()); } catch (e) { applyTheme('auto'); }
+    wireTheme();
 
     var ap = approvalFromUrl();
     if (ap) { state.approval = ap; showApproval(); return; }

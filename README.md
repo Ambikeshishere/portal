@@ -181,6 +181,29 @@ everywhere (role dropdown, user/cluster tables, ticket timeline, analytics).
   `tickets.due_at`, drives the SLA badge (`ON_TRACK`/`DUE_SOON`/`BREACHED`) and
   the hourly SLA job, and shows up in the ticket timeline as `DEADLINE_SET`.
 
+## Theme (light / dark / auto)
+
+The topbar has a three-way switch (`☀` light, `🌙` dark, `◐` auto); the choice is
+kept in `localStorage` under `pw_theme` and `auto` is the default.
+
+`auto` follows the clock like the macOS dynamic wallpaper: the page sits on a
+full-screen `.sky` layer whose gradient is interpolated per hour —
+night black → sunrise yellow (06:00) → noon white (12:00) → sunset amber
+(17:30) → black again by 20:00. The light/dark palette flips with it
+(`dawn`/`day`/`dusk` render light, `night` renders dark), and a 60s timer
+re-checks so it changes on its own without a reload. On the shell the topbar and
+sidebar go translucent over the wallpaper so it stays visible behind the cards.
+
+Preview any time of day from the browser console:
+
+```js
+__setAutoHour(18.5)  // 6:30pm — amber sunset
+__setAutoHour(2)     // 2am — black night
+__setAutoHour(null)  // back to the real clock
+```
+
+Sample renders of all four day-parts are in `theme-preview/`.
+
 ## Security notes
 
 - Sign-in goes through Firebase (Google) ID tokens: the backend checks the
